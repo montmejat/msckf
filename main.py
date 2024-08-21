@@ -22,12 +22,11 @@ def log_camera(camera_data: CameraData):
 
 
 def setup_msckf(dataset: TumDataset) -> MSCKF:
-    gyro_var = dataset.gyroscope_noise_density**2 * dataset.imu_sampling_frequency
-
     return MSCKF(
-        # Note: (rad/s)/√Hz = rad/s)*√s
-        # ((rad/s)/√Hz)**2 * Hz = rad**2 / s**2
-        [gyro_var] * 3,
+        gyro_noise=dataset.gyro_noise_density,
+        gyro_bias_noise=dataset.gyro_random_walk,
+        accel_noise=dataset.accel_noise_density,
+        accel_bias_noise=dataset.accel_random_walk,
     )
 
 

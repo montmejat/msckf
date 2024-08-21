@@ -49,7 +49,10 @@ class TumDataset:
 
         with open(f"{folder_path}/dso/imu_config.yaml") as f:
             imu_config = yaml.safe_load(f)
-            self.gyroscope_noise_density = imu_config["gyroscope_noise_density"]
+            self.gyro_noise_density = imu_config["gyroscope_noise_density"]
+            self.gyro_random_walk = imu_config["gyroscope_random_walk"]
+            self.accel_noise_density = imu_config["accelerometer_noise_density"]
+            self.accel_random_walk = imu_config["accelerometer_random_walk"]
             self.imu_sampling_frequency = imu_config["update_rate"]
 
     def __next__(self) -> Tuple[ImuData, CameraData]:
@@ -57,9 +60,7 @@ class TumDataset:
             cam_data = self.cam[self.cam_idx]
             self.timestamp = cam_data["timestamp"]
             self.cam_idx += 1
-            return CameraData(
-                self.timestamp, np.array(Image.open(cam_data["filepath"]))
-            )
+            return CameraData(self.timestamp, np.array(Image.open(cam_data["filepath"])))
 
         def next_imu_data():
             imu_data = self.imu[self.imu_idx]
