@@ -9,18 +9,14 @@ from PIL import Image
 
 @dataclass
 class ImuData:
-    timestamp: int
-    wx: float
-    wy: float
-    wz: float
-    ax: float
-    ay: float
-    az: float
+    timestamp_ns: int
+    gyro: np.ndarray
+    accel: np.ndarray
 
 
 @dataclass
 class CameraData:
-    timestamp: int
+    timestamp_ns: int
     image: np.ndarray
 
 
@@ -29,7 +25,7 @@ class TumDataset:
         with open(f"{folder_path}/mav0/{imu}/data.csv") as f:
             reader = csv.reader(f)
             next(reader)
-            self.imu = [ImuData(int(row[0]), *map(float, row[1:])) for row in reader]
+            self.imu = [ImuData(int(row[0]), np.array(row[1:4]), np.array(row[4:])) for row in reader]
 
         with open(f"{folder_path}/mav0/{camera}/data.csv") as f:
             reader = csv.reader(f)
@@ -64,14 +60,14 @@ class TumDataset:
 
         def next_imu_data():
             imu_data = self.imu[self.imu_idx]
-            self.timestamp = imu_data.timestamp
+            self.timestamp = imu_data.timestamp_ns
             self.imu_idx += 1
             return imu_data
 
         if self.imu_idx < len(self.imu) and self.cam_idx < len(self.cam):
-            if self.imu[self.imu_idx].timestamp < self.cam[self.cam_idx]["timestamp"]:
+            if self.imu[self.imu_idx].timestamp_ns < self.cam[self.cam_idx]["timestamp"]:
                 return (next_imu_data(), None)
-            elif self.imu[self.imu_idx].timestamp > self.cam[self.cam_idx]["timestamp"]:
+            elif self.imu[self.imu_idx].timestamp_ns > self.cam[self.cam_idx]["timestamp"]:
                 return (None, next_camera_data())
             else:
                 return (next_imu_data(), next_camera_data())

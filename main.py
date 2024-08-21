@@ -8,12 +8,12 @@ from msckf import MSCKF
 
 def log_imu(imu_data: ImuData):
     if imu_data is not None:
-        rr.log("imu/wx", rr.Scalar(imu_data.wx))
-        rr.log("imu/wy", rr.Scalar(imu_data.wy))
-        rr.log("imu/wz", rr.Scalar(imu_data.wz))
-        rr.log("imu/ax", rr.Scalar(imu_data.ax))
-        rr.log("imu/ay", rr.Scalar(imu_data.ay))
-        rr.log("imu/az", rr.Scalar(imu_data.az))
+        rr.log("imu/wx", rr.Scalar(imu_data.gyro[0]))
+        rr.log("imu/wy", rr.Scalar(imu_data.gyro[1]))
+        rr.log("imu/wz", rr.Scalar(imu_data.gyro[2]))
+        rr.log("imu/ax", rr.Scalar(imu_data.accel[0]))
+        rr.log("imu/ay", rr.Scalar(imu_data.accel[1]))
+        rr.log("imu/az", rr.Scalar(imu_data.accel[2]))
 
 
 def log_camera(camera_data: CameraData):
@@ -45,6 +45,9 @@ if __name__ == "__main__":
         rr.set_time_nanos("sensors", dataset.timestamp)
         log_imu(imu_data)
         log_camera(camera_data)
+
+        if imu_data is not None:
+            msckf.propagate(1 / dataset.imu_sampling_frequency, imu_data.gyro, imu_data.accel)
 
         i += 1
         if i == 50:
