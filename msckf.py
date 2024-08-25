@@ -9,11 +9,15 @@ GRAVITY = np.array([0.0, 0.0, 9.81])
 
 class State:
     def __init__(self):
-        self.quat = np.array([0.0, 0.0, 0.0, 1.0])
+        self.quat = np.array([[0.0], [0.0], [0.0], [1.0]])
         self.gyro_bias = np.zeros(3)
         self.velocity = np.zeros(3)
         self.accel_bias = np.zeros(3)
         self.position = np.zeros(3)
+
+    @property
+    def rotation_matrix(self):
+        return R.from_quat(self.quat.reshape(4)).as_matrix()
 
 
 class MSCKF:
@@ -53,9 +57,10 @@ class MSCKF:
         def dq(quat):
             return 0.5 * omega(gyro) @ quat
 
-        quat = norm(rk4(dq, dt, self.state.quaternion))
+        quat = norm(rk4(dq, dt, self.state.quat))
 
-        vel = self.state.velocity + (R.from_quat(quat).as_matrix().T @ accel - GRAVITY) * dt
+        rot_matrix = R.from_quat(quat.reshape(4)).as_matrix()
+        vel = self.state.velocity + (rot_matrix.T @ accel - GRAVITY) * dt
         pos = self.state.position + dt * vel
 
         self.state.quat = quat

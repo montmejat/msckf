@@ -21,11 +21,14 @@ class CameraData:
 
 
 class TumDataset:
-    def __init__(self, folder_path: str, imu: str = "imu0", camera: str = "cam0"):
+    def __init__(self, folder_path: str, imu: str = "imu0", camera: str = "cam0", max_frames: int = None):
         with open(f"{folder_path}/mav0/{imu}/data.csv") as f:
             reader = csv.reader(f)
             next(reader)
-            self.imu = [ImuData(int(row[0]), np.array(row[1:4]), np.array(row[4:])) for row in reader]
+            self.imu = [
+                ImuData(int(row[0]), np.array(row[1:4], dtype=float), np.array(row[4:], dtype=float))
+                for row in reader
+            ]
 
         with open(f"{folder_path}/mav0/{camera}/data.csv") as f:
             reader = csv.reader(f)
@@ -39,19 +42,23 @@ class TumDataset:
             ]
 
         self.camera = camera
+        self.max_frames = max_frames
         self.imu_idx = 0
         self.cam_idx = 0
         self.timestamp = 0
 
         with open(f"{folder_path}/dso/imu_config.yaml") as f:
             imu_config = yaml.safe_load(f)
-            self.gyro_noise_density = imu_config["gyroscope_noise_density"]
-            self.gyro_random_walk = imu_config["gyroscope_random_walk"]
-            self.accel_noise_density = imu_config["accelerometer_noise_density"]
-            self.accel_random_walk = imu_config["accelerometer_random_walk"]
+            self.gyro_noise_density = np.array([imu_config["gyroscope_noise_density"]] * 3)
+            self.gyro_random_walk = np.array([imu_config["gyroscope_random_walk"]] * 3)
+            self.accel_noise_density = np.array([imu_config["accelerometer_noise_density"]] * 3)
+            self.accel_random_walk = np.array([imu_config["accelerometer_random_walk"]] * 3)
             self.imu_sampling_frequency = imu_config["update_rate"]
 
     def __next__(self) -> Tuple[ImuData, CameraData]:
+        if self.max_frames is not None and self.imu_idx >= self.max_frames:
+            raise StopIteration
+
         def next_camera_data():
             cam_data = self.cam[self.cam_idx]
             self.timestamp = cam_data["timestamp"]

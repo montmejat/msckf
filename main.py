@@ -1,5 +1,6 @@
 import argparse
 
+import numpy as np
 import rerun as rr
 
 from dataset import CameraData, ImuData, TumDataset
@@ -21,6 +22,18 @@ def log_camera(camera_data: CameraData):
         rr.log("camera", rr.Image(camera_data.image))
 
 
+def log_frame(position: np.ndarray, rotation_matrix: np.ndarray, radii: float = 0.02, size: float = 1.0):
+    x = rotation_matrix @ np.array([size, 0.0, 0.0])
+    y = rotation_matrix @ np.array([0.0, size, 0.0])
+    z = rotation_matrix @ np.array([0.0, 0.0, size])
+
+    origins = [position, position, position]
+    vectors = [x, y, z]
+    colors = [[255, 0, 0], [0, 255, 0], [0, 0, 255]]
+
+    rr.log("world/frame", rr.Arrows3D(vectors=vectors, origins=origins, colors=colors, radii=radii))
+
+
 def setup_msckf(dataset: TumDataset) -> MSCKF:
     return MSCKF(
         gyro_noise=dataset.gyro_noise_density,
@@ -33,14 +46,14 @@ def setup_msckf(dataset: TumDataset) -> MSCKF:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("dataset")
+    parser.add_argument("-f", "--frames", type=int)
     args = parser.parse_args()
 
-    dataset = TumDataset(args.dataset)
+    dataset = TumDataset(args.dataset, max_frames=args.frames)
     msckf = setup_msckf(dataset)
 
     rr.init("MSCKF", spawn=True)
 
-    i = 0
     for imu_data, camera_data in dataset:
         rr.set_time_nanos("sensors", dataset.timestamp)
         log_imu(imu_data)
@@ -48,7 +61,4 @@ if __name__ == "__main__":
 
         if imu_data is not None:
             msckf.propagate(1 / dataset.imu_sampling_frequency, imu_data.gyro, imu_data.accel)
-
-        i += 1
-        if i == 50:
-            break
+            log_frame(msckf.state.position, msckf.state.rotation_matrix)
