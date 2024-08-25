@@ -22,7 +22,7 @@ def log_camera(camera_data: CameraData):
         rr.log("camera", rr.Image(camera_data.image))
 
 
-def log_frame(position: np.ndarray, rotation_matrix: np.ndarray, radii: float = 0.02, size: float = 1.0):
+def log_frame(position: np.ndarray, rotation_matrix: np.ndarray, radii: float = 0.01, size: float = 1.0):
     x = rotation_matrix @ np.array([size, 0.0, 0.0])
     y = rotation_matrix @ np.array([0.0, size, 0.0])
     z = rotation_matrix @ np.array([0.0, 0.0, size])
@@ -32,6 +32,28 @@ def log_frame(position: np.ndarray, rotation_matrix: np.ndarray, radii: float = 
     colors = [[255, 0, 0], [0, 255, 0], [0, 0, 255]]
 
     rr.log("world/frame", rr.Arrows3D(vectors=vectors, origins=origins, colors=colors, radii=radii))
+
+
+def log_pinhole(position: np.ndarray, rotation_matrix: np.ndarray, image: np.ndarray):
+    height, width = image.shape[:2]
+    rr.log(
+        "world/camera",
+        rr.Transform3D(
+            translation=position.flatten(),
+            mat3x3=rotation_matrix,
+            axis_length=1.0,
+        ),
+    )
+    rr.log(
+        "world/camera/image",
+        rr.Pinhole(
+            focal_length=255,
+            width=width,
+            height=height,
+            image_plane_distance=0.5,
+        ),
+    )
+    rr.log("world/camera/image", rr.Image(image))
 
 
 def setup_msckf(dataset: TumDataset) -> MSCKF:
@@ -62,3 +84,8 @@ if __name__ == "__main__":
         if imu_data is not None:
             msckf.propagate(1 / dataset.imu_sampling_frequency, imu_data.gyro, imu_data.accel)
             log_frame(msckf.state.position, msckf.state.rotation_matrix)
+
+        if camera_data is not None:
+            rotation = msckf.state.rotation_matrix @ dataset.R_cam_imu
+            position = msckf.state.position + dataset.t_cam_imu
+            log_pinhole(position, rotation, camera_data.image)

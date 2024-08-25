@@ -55,6 +55,12 @@ class TumDataset:
             self.accel_random_walk = np.array([imu_config["accelerometer_random_walk"]] * 3)
             self.imu_sampling_frequency = imu_config["update_rate"]
 
+        with open(f"{folder_path}/dso/camchain.yaml") as f:
+            imu_config = yaml.safe_load(f)
+            self.T_cam_imu = np.array(imu_config[self.camera]["T_cam_imu"])
+            self.R_cam_imu = self.T_cam_imu[:3, :3]
+            self.t_cam_imu = self.T_cam_imu[:3, 3]
+
     def __next__(self) -> Tuple[ImuData, CameraData]:
         if self.max_frames is not None and self.imu_idx >= self.max_frames:
             raise StopIteration
