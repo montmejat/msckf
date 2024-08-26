@@ -21,7 +21,6 @@ def norm(x: np.ndarray) -> np.ndarray:
 
 
 def omega(vector: np.ndarray) -> np.ndarray:
-    vector = vector.reshape(3, 1)
     vect_x = skew(vector)
     return np.block([[-vect_x, vector], [-vector.T, 0]])
 

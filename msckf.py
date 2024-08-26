@@ -4,16 +4,16 @@ from scipy.spatial.transform import Rotation as R
 
 from utils import cov_matrix, norm, omega, rk4
 
-GRAVITY = np.array([0.0, 0.0, 9.81])
+GRAVITY = np.array([[0.0], [0.0], [9.81]])
 
 
 class State:
-    def __init__(self):
+    def __init__(self, gyro_bias: ArrayLike = [0.0, 0.0, 0.0], accel_bias: ArrayLike = [0.0, 0.0, 0.0]):
         self.quat = np.array([[0.0], [0.0], [0.0], [1.0]])
-        self.gyro_bias = np.zeros(3)
-        self.velocity = np.zeros(3)
-        self.accel_bias = np.zeros(3)
-        self.position = np.zeros(3)
+        self.gyro_bias = np.array(gyro_bias).reshape(3, 1)
+        self.velocity = np.zeros((3, 1))
+        self.accel_bias = np.array(accel_bias).reshape(3, 1)
+        self.position = np.zeros((3, 1))
 
     @property
     def rotation_matrix(self):
@@ -27,6 +27,8 @@ class MSCKF:
         gyro_bias_noise: ArrayLike,
         accel_noise: ArrayLike,
         accel_bias_noise: ArrayLike,
+        gyro_bias: ArrayLike = [0.0, 0.0, 0.0],
+        accel_bias: ArrayLike = [0.0, 0.0, 0.0],
         init_gyro_std: ArrayLike = [1.0, 1.0, 1.0],
         init_gyro_bias_std: ArrayLike = [1.0, 1.0, 1.0],
         init_accel_std: ArrayLike = [1.0, 1.0, 1.0],
@@ -48,21 +50,17 @@ class MSCKF:
         )
 
         self.Phi = np.eye(15)
-        self.state = State()
+        self.state = State(gyro_bias, accel_bias)
 
-    def propagate(self, dt: float, gyro: ArrayLike, accel: ArrayLike):
-        gyro = gyro - self.state.gyro_bias
-        accel = accel - self.state.accel_bias
+    def propagate(self, dt: float, gyro: np.ndarray, accel: np.ndarray):
+        gyro = gyro.reshape(3, 1) - self.state.gyro_bias
+        accel = accel.reshape(3, 1) - self.state.accel_bias
 
         def dq(quat):
             return 0.5 * omega(gyro) @ quat
 
-        quat = norm(rk4(dq, dt, self.state.quat))
+        self.state.quat = norm(rk4(dq, dt, self.state.quat))
 
-        rot_matrix = R.from_quat(quat.reshape(4)).as_matrix()
-        vel = self.state.velocity + (rot_matrix.T @ accel - GRAVITY) * dt
-        pos = self.state.position + dt * vel
-
-        self.state.quat = quat
-        self.state.velocity = vel
-        self.state.position = pos
+        rot_matrix = R.from_quat(self.state.quat.reshape(4)).as_matrix()
+        self.state.velocity += (rot_matrix @ accel - GRAVITY) * dt
+        self.state.position += self.state.velocity * dt
