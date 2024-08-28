@@ -10,19 +10,17 @@ positions = []
 gt_positions = []
 
 
-def log_imu(imu_data: ImuData):
-    if imu_data is not None:
-        rr.log("imu/gyro/x", rr.Scalar(imu_data.gyro[0]))
-        rr.log("imu/gyro/y", rr.Scalar(imu_data.gyro[1]))
-        rr.log("imu/gyro/z", rr.Scalar(imu_data.gyro[2]))
-        rr.log("imu/accel/x", rr.Scalar(imu_data.accel[0]))
-        rr.log("imu/accel/y", rr.Scalar(imu_data.accel[1]))
-        rr.log("imu/accel/z", rr.Scalar(imu_data.accel[2]))
+def log_imu(imu_data: ImuData, name: str = ""):
+    rr.log(f"imu/gyro/x{name}", rr.Scalar(imu_data.gyro[0]))
+    rr.log(f"imu/gyro/y{name}", rr.Scalar(imu_data.gyro[1]))
+    rr.log(f"imu/gyro/z{name}", rr.Scalar(imu_data.gyro[2]))
+    rr.log(f"imu/accel/x{name}", rr.Scalar(imu_data.accel[0]))
+    rr.log(f"imu/accel/y{name}", rr.Scalar(imu_data.accel[1]))
+    rr.log(f"imu/accel/z{name}", rr.Scalar(imu_data.accel[2]))
 
 
 def log_camera(camera_data: CameraData):
-    if camera_data is not None:
-        rr.log("camera", rr.Image(camera_data.image))
+    rr.log("camera", rr.Image(camera_data.image))
 
 
 def log_frame(position: np.ndarray, rotation_matrix: np.ndarray, radii: float = 0.01, size: float = 1.0):
@@ -33,10 +31,8 @@ def log_frame(position: np.ndarray, rotation_matrix: np.ndarray, radii: float = 
     origins = [position, position, position]
     vectors = [x, y, z]
     colors = [[255, 0, 0], [0, 255, 0], [0, 0, 255]]
-    positions.append(position)
 
     rr.log("world/frame", rr.Arrows3D(vectors=vectors, origins=origins, colors=colors, radii=radii))
-    rr.log("world/positions", rr.Points3D(positions=positions), timeless=True)
 
 
 def log_pinhole(position: np.ndarray, rotation_matrix: np.ndarray, image: np.ndarray):
@@ -68,10 +64,13 @@ def log_state(msckf: MSCKF):
     rr.log("state/velocity/z", rr.Scalar(velocity[2]))
     rr.log("state/velocity/norm", rr.Scalar(np.linalg.norm(velocity)))
 
+    positions.append(msckf.state.position.copy().reshape(3))
+    rr.log("world/positions", rr.Points3D(positions))
+
 
 def log_ground_truth(ground_truth: GroundTruthData):
     gt_positions.append(ground_truth.translation)
-    rr.log("world/ground_truth", rr.Points3D(positions=gt_positions))
+    rr.log("world/ground_truth", rr.Points3D(gt_positions))
 
 
 def setup_msckf(dataset: TumDataset) -> MSCKF:
@@ -80,8 +79,9 @@ def setup_msckf(dataset: TumDataset) -> MSCKF:
         gyro_bias_noise=dataset.gyro_random_walk,
         accel_noise=dataset.accel_noise_density,
         accel_bias_noise=dataset.accel_random_walk,
-        gyro_bias=[0.0283122, 0.00723077, 0.0165292],
-        accel_bias=[-1.30318, -0.391441, 0.380509],
+        accel_bias=[0.0, 0.15, -0.025],
+        init_quaternion=[0.0075138116, -0.0037085755, -0.0010709302, 0.9999643205],
+        init_position=[0.8082440113, -0.2339065203, 1.2688503693],
     )
 
 
@@ -98,15 +98,17 @@ if __name__ == "__main__":
 
     for imu_data, camera_data, ground_truth in dataset:
         rr.set_time_nanos("sensors", dataset.timestamp)
-        log_imu(imu_data)
-        log_camera(camera_data)
 
         if imu_data is not None:
+            log_imu(imu_data)
+
             msckf.propagate(1 / dataset.imu_sampling_frequency, imu_data.gyro, imu_data.accel)
             log_frame(msckf.state.position.reshape(3), msckf.state.rotation_matrix)
             log_state(msckf)
 
         if camera_data is not None:
+            log_camera(camera_data)
+
             rotation = msckf.state.rotation_matrix @ dataset.R_cam_imu
             position = msckf.state.position.reshape(3) + dataset.t_cam_imu
             log_pinhole(position.reshape(3), rotation, camera_data.image)
