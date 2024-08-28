@@ -17,7 +17,15 @@ class ImuData:
 @dataclass
 class CameraData:
     timestamp_ns: int
+    filepath: str
     image: np.ndarray
+
+
+@dataclass
+class GroundTruthData:
+    timestamp_ns: int
+    translation: np.ndarray
+    quaternion: np.ndarray
 
 
 class TumDataset:
@@ -34,10 +42,17 @@ class TumDataset:
             reader = csv.reader(f)
             next(reader)
             self.cam = [
-                {
-                    "timestamp": int(row[0]),
-                    "filepath": f"{folder_path}/mav0/{camera}/data/{row[1]}",
-                }
+                CameraData(int(row[0]), f"{folder_path}/mav0/{camera}/data/{row[1]}", None)
+                for row in reader
+            ]
+
+        with open(f"{folder_path}/dso/gt_imu.csv") as f:
+            reader = csv.reader(f)
+            next(reader)
+            self.ground_truth = [
+                GroundTruthData(
+                    int(row[0]), np.array(row[1:4], dtype=float), np.array(row[4:], dtype=float)
+                )
                 for row in reader
             ]
 
@@ -45,6 +60,7 @@ class TumDataset:
         self.max_frames = max_frames
         self.imu_idx = 0
         self.cam_idx = 0
+        self.gt_idx = 0
         self.timestamp = 0
 
         with open(f"{folder_path}/dso/imu_config.yaml") as f:
@@ -61,35 +77,34 @@ class TumDataset:
             self.R_cam_imu = self.T_cam_imu[:3, :3]
             self.t_cam_imu = self.T_cam_imu[:3, 3]
 
-    def __next__(self) -> Tuple[ImuData, CameraData]:
+    def __next__(self) -> Tuple[ImuData, CameraData, GroundTruthData]:
         if self.max_frames is not None and self.imu_idx >= self.max_frames:
             raise StopIteration
 
-        def next_camera_data():
-            cam_data = self.cam[self.cam_idx]
-            self.timestamp = cam_data["timestamp"]
-            self.cam_idx += 1
-            return CameraData(self.timestamp, np.array(Image.open(cam_data["filepath"])))
+        choices = []
+        if self.imu_idx < len(self.imu):
+            choices.append(self.imu[self.imu_idx])
+        if self.cam_idx < len(self.cam):
+            choices.append(self.cam[self.cam_idx])
+        if self.gt_idx < len(self.ground_truth):
+            choices.append(self.ground_truth[self.gt_idx])
 
-        def next_imu_data():
-            imu_data = self.imu[self.imu_idx]
-            self.timestamp = imu_data.timestamp_ns
+        if len(choices) == 0:
+            raise StopIteration
+
+        next_data = min(choices, key=lambda x: x.timestamp_ns)
+        self.timestamp = next_data.timestamp_ns
+
+        if isinstance(next_data, ImuData):
             self.imu_idx += 1
-            return imu_data
-
-        if self.imu_idx < len(self.imu) and self.cam_idx < len(self.cam):
-            if self.imu[self.imu_idx].timestamp_ns < self.cam[self.cam_idx]["timestamp"]:
-                return (next_imu_data(), None)
-            elif self.imu[self.imu_idx].timestamp_ns > self.cam[self.cam_idx]["timestamp"]:
-                return (None, next_camera_data())
-            else:
-                return (next_imu_data(), next_camera_data())
-        elif self.imu_idx < len(self.imu):
-            return (next_imu_data(), None)
-        elif self.cam_idx < len(self.cam):
-            return (None, next_camera_data())
-
-        raise StopIteration
+            return next_data, None, None
+        elif isinstance(next_data, CameraData):
+            self.cam_idx += 1
+            next_data.image = np.array(Image.open(next_data.filepath))
+            return None, next_data, None
+        elif isinstance(next_data, GroundTruthData):
+            self.gt_idx += 1
+            return None, None, next_data
 
     def __iter__(self):
         return self

@@ -62,5 +62,5 @@ class MSCKF:
         self.state.quat = norm(rk4(dq, dt, self.state.quat))
 
         rot_matrix = R.from_quat(self.state.quat.reshape(4)).as_matrix()
-        self.state.velocity += (rot_matrix @ accel - GRAVITY) * dt
+        self.state.velocity += (rot_matrix.T @ accel - GRAVITY) * dt
         self.state.position += self.state.velocity * dt

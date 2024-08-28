@@ -3,10 +3,11 @@ import argparse
 import numpy as np
 import rerun as rr
 
-from dataset import CameraData, ImuData, TumDataset
+from dataset import CameraData, GroundTruthData, ImuData, TumDataset
 from msckf import MSCKF
 
 positions = []
+gt_positions = []
 
 
 def log_imu(imu_data: ImuData):
@@ -68,6 +69,11 @@ def log_state(msckf: MSCKF):
     rr.log("state/velocity/norm", rr.Scalar(np.linalg.norm(velocity)))
 
 
+def log_ground_truth(ground_truth: GroundTruthData):
+    gt_positions.append(ground_truth.translation)
+    rr.log("world/ground_truth", rr.Points3D(positions=gt_positions))
+
+
 def setup_msckf(dataset: TumDataset) -> MSCKF:
     return MSCKF(
         gyro_noise=dataset.gyro_noise_density,
@@ -90,7 +96,7 @@ if __name__ == "__main__":
 
     rr.init("MSCKF", spawn=True)
 
-    for imu_data, camera_data in dataset:
+    for imu_data, camera_data, ground_truth in dataset:
         rr.set_time_nanos("sensors", dataset.timestamp)
         log_imu(imu_data)
         log_camera(camera_data)
@@ -104,3 +110,6 @@ if __name__ == "__main__":
             rotation = msckf.state.rotation_matrix @ dataset.R_cam_imu
             position = msckf.state.position.reshape(3) + dataset.t_cam_imu
             log_pinhole(position.reshape(3), rotation, camera_data.image)
+
+        if ground_truth is not None:
+            log_ground_truth(ground_truth)
